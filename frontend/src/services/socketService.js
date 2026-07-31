@@ -1,7 +1,7 @@
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081'
 
 let client = null
 let subscription = null

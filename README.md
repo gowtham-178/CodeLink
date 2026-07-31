@@ -62,24 +62,23 @@ mvnw.cmd spring-boot:run        # Windows
 ./mvnw spring-boot:run          # macOS / Linux
 ```
 
-The backend starts on **http://localhost:8080**.
+The backend starts on **http://localhost:8081**.
 
-### Key configuration (`application.yml`)
+### Backend Environment Variables (`.env`)
 
-```yaml
-codelink:
-  cors:
-    # Comma-separated list of allowed frontend origins
-    allowed-origins: http://localhost:5173
+Copy `.env.example` to `.env` in the root directory:
 
-  room:
-    # Empty room must be idle this long before reaper evicts it
-    idle-timeout-minutes: 30
-    # How often the reaper runs (milliseconds)
-    reaper-interval-ms: 300000
-    # Max chat messages kept in memory per room
-    chat-history-limit: 200
+```env
+SERVER_PORT=8081
+REDIS_HOST=valued-mammal-99002.upstash.io
+REDIS_PORT=6379
+REDIS_PASSWORD=your_redis_password
+REDIS_SSL_ENABLED=true
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+ROOM_EXPIRY_HOURS=24
 ```
+
+Spring Boot automatically reads these from `.env` or system environment variables (with sensible defaults configured in `application.properties`).
 
 ---
 
@@ -87,20 +86,20 @@ codelink:
 
 ```bash
 cd frontend
-cp .env.example .env      # already pre-filled for local dev
+cp .env.example .env      # pre-filled for local dev
 npm install
 npm run dev
 ```
 
 The frontend starts on **http://localhost:5173**.
 
-### Environment variables (`frontend/.env`)
+### Frontend Environment Variables (`frontend/.env`)
 
 ```env
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=http://localhost:8081
 ```
 
-Change this to your backend URL for production deployments.
+Change `VITE_API_BASE_URL` to your backend URL for production deployments.
 
 ---
 
