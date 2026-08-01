@@ -5,10 +5,10 @@ import lombok.Getter;
 
 import java.time.Instant;
 
-@Getter
-@AllArgsConstructor
+@Getter @AllArgsConstructor
 public class RoomResponse {
     private String roomId;
+    private String ownerUsername;
     private String code;
-    private Instant expiresAt;
+    private Instant createdAt;
 }

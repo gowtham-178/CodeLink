@@ -11,6 +11,7 @@ public class WsMessages {
     @NoArgsConstructor
     public static class CodeEdit {
         private String code;
+        private String senderSession;
     }
 
     // ── Outbound: server → /topic/room/{roomId} ───────────────────────────
@@ -19,6 +20,7 @@ public class WsMessages {
     public static class CodeBroadcast {
         private String code;
         private int viewerCount;
+        private String senderSession;
     }
 
     // ── Outbound: viewer count only (on connect/disconnect) ───────────────

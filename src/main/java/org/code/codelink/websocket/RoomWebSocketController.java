@@ -3,7 +3,7 @@ package org.code.codelink.websocket;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.code.codelink.controller.RoomController;
-import org.springframework.beans.factory.annotation.Value;
+import org.code.codelink.repository.RoomRepository;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -17,7 +17,6 @@ import org.springframework.web.socket.messaging.SessionConnectEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Controller
@@ -27,52 +26,53 @@ public class RoomWebSocketController {
 
     private final StringRedisTemplate redis;
     private final SimpMessagingTemplate broker;
+    private final RoomRepository roomRepository;
 
-    @Value("${codelink.room.expiry-hours:24}")
-    private long expiryHours;
-
-    // Maps STOMP session ID → roomId so disconnect can decrement the right room
+    // STOMP session ID → roomId
     private final ConcurrentHashMap<String, String> sessionRooms = new ConcurrentHashMap<>();
-
-    // Maps roomId → live viewer count on this instance
+    // roomId → live viewer count
     private final ConcurrentHashMap<String, AtomicInteger> viewerCounts = new ConcurrentHashMap<>();
 
-    // ── Edit ─────────────────────────────────────────────────────────────────
-    // Client publishes to /app/room/{roomId}/edit with body { "code": "..." }
+    // ── Sync ───────────────────────────────────────────────────────────────────
+    // New client requests current state after subscribing.
+    // Broadcasts latest Redis code to the topic — senderSession is null so
+    // the requester receives it; existing tabs ignore it if content unchanged.
+    @MessageMapping("/room/{roomId}/sync")
+    public void sync(@DestinationVariable String roomId) {
+        String code = redis.opsForValue().get(RoomController.codeKey(roomId));
+        if (code == null) code = "";
+        broker.convertAndSend("/topic/room/" + roomId,
+                new WsMessages.CodeBroadcast(code, viewerCount(roomId), null));
+    }
+
+    // ── Edit ──────────────────────────────────────────────────────────────────
+    // Client → /app/room/{roomId}/edit  body: { "code": "..." }
+    // Writes to Redis (live buffer) and broadcasts to all subscribers.
+    // Postgres is written immediately for authenticated users, Redis-only for guests.
     @MessageMapping("/room/{roomId}/edit")
     public void edit(
             @DestinationVariable String roomId,
             @Payload WsMessages.CodeEdit msg,
             SimpMessageHeaderAccessor headers) {
 
-        String key = RoomController.codeKey(roomId);
+        String code = msg.getCode() != null ? msg.getCode() : "";
+        redis.opsForValue().set(RoomController.codeKey(roomId), code);
 
-        // Ignore edits for rooms that have already expired
-        if (Boolean.FALSE.equals(redis.hasKey(key))) {
-            log.warn("Edit received for expired/unknown room: {}", roomId);
-            return;
-        }
+        // Persist to Postgres on every edit for all users (guests & authenticated)
+        roomRepository.findByRoomId(roomId).ifPresent(room -> {
+            room.setContent(code);
+            roomRepository.save(room);
+        });
 
-        // Write latest content + refresh TTL
-        redis.opsForValue().set(key, msg.getCode() != null ? msg.getCode() : "", expiryHours, TimeUnit.HOURS);
-
-        // Track session → room on first edit (lazy registration fallback)
+        // Lazy-register session→room fallback
         String sessionId = headers.getSessionId();
-        if (sessionId != null) {
-            sessionRooms.putIfAbsent(sessionId, roomId);
-        }
+        if (sessionId != null) sessionRooms.putIfAbsent(sessionId, roomId);
 
-        int viewers = viewerCount(roomId);
-        broker.convertAndSend(
-                "/topic/room/" + roomId,
-                new WsMessages.CodeBroadcast(msg.getCode() != null ? msg.getCode() : "", viewers)
-        );
+        broker.convertAndSend("/topic/room/" + roomId,
+                new WsMessages.CodeBroadcast(code, viewerCount(roomId), msg.getSenderSession()));
     }
 
     // ── Connect ───────────────────────────────────────────────────────────────
-    // We learn which room the session belongs to on the first edit (above) or
-    // by reading the STOMP connect headers if the client sends a roomId header.
-    // Either way, viewer count is tracked here for the "N people viewing" badge.
     @EventListener
     public void onConnect(SessionConnectEvent event) {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
@@ -100,14 +100,13 @@ public class RoomWebSocketController {
         if (roomId == null) return;
 
         AtomicInteger counter = viewerCounts.get(roomId);
-        int count = (counter != null) ? Math.max(0, counter.decrementAndGet()) : 0;
+        int count = counter != null ? Math.max(0, counter.decrementAndGet()) : 0;
         if (counter != null && count == 0) viewerCounts.remove(roomId);
 
         broker.convertAndSend("/topic/room/" + roomId, new WsMessages.ViewerCount(count));
         log.debug("DISCONNECT session={} room={} viewers={}", sessionId, roomId, count);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     private int viewerCount(String roomId) {
         AtomicInteger c = viewerCounts.get(roomId);
         return c != null ? c.get() : 0;
