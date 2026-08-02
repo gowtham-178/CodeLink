@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Link2, Plus, LogIn, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { createRoom } from '../services/roomApi'
@@ -7,6 +7,9 @@ import { createRoom } from '../services/roomApi'
 export default function CreateRoomPage() {
   const navigate = useNavigate()
   const { username, logout } = useAuth()
+
+  const location = useLocation()
+  const roomNotFound = location.state?.roomNotFound ?? false
 
   const [creating, setCreating]       = useState(false)
   const [createError, setCreateError] = useState('')
@@ -50,6 +53,13 @@ export default function CreateRoomPage() {
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col gap-6">
+
+          {/* Room-not-found banner */}
+          {roomNotFound && (
+            <p className="text-red-400 text-xs bg-red-950 border border-red-800 rounded-lg px-3 py-2">
+              That room doesn't exist or has expired.
+            </p>
+          )}
 
           {/* Auth strip */}
           <div className="flex items-center justify-between">

@@ -90,9 +90,11 @@ export default function EditorPage() {
       })
       .catch(err => {
         if (err.name === 'AbortError') return
-        // Room not found → go home. Don't redirect to login on 401 —
-        // GET is public and should never 401.
-        navigate('/', { replace: true })
+        if (err.status === 404) {
+          navigate('/', { replace: true, state: { roomNotFound: true } })
+        } else {
+          navigate('/', { replace: true })
+        }
       })
 
     return () => {
