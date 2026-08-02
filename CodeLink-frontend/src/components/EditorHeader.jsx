@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Link2, Copy, Check, Plus, Trash2, LogOut } from 'lucide-react'
+import { Link2, Copy, Check, Plus, Trash2, LogOut, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { createRoom, deleteRoom } from '../services/roomApi'
 
@@ -57,10 +57,15 @@ export default function EditorHeader({ roomId, ownerUsername, viewerCount }) {
   return (
     <>
       <header className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center px-4 gap-2 shrink-0">
-        <div className="flex items-center gap-2 select-none shrink-0">
+        <button
+          onClick={() => navigate('/')}
+          title="Back to Create / Join Room"
+          className="flex items-center gap-1.5 text-zinc-300 hover:text-white transition-colors select-none shrink-0 group focus:outline-none"
+        >
+          <ArrowLeft size={16} className="text-zinc-400 group-hover:text-white transition-colors" />
           <Link2 className="text-indigo-400" size={18} />
           <span className="font-semibold text-white text-sm tracking-wide">CodeLink</span>
-        </div>
+        </button>
 
         {ownerUsername && (
           <span className="text-zinc-600 text-xs hidden sm:block shrink-0">

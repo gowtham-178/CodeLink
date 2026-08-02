@@ -105,6 +105,18 @@ export default function EditorPage() {
     }
   }, [roomId])
 
+  // Always navigate to Create / Join Room page ('/') on Back button navigation
+  useEffect(() => {
+    window.history.pushState(null, '', window.location.href)
+    const handlePopState = () => {
+      navigate('/', { replace: true })
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [navigate])
+
   function handleEditorChange(value) {
     if (isRemoteEditRef.current) return
     const newCode = value ?? ''
