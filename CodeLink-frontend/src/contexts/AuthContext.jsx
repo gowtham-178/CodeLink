@@ -5,10 +5,12 @@ const TOKEN_KEY = 'cl_token'
 const USER_KEY  = 'cl_user'
 
 export function getToken() {
-  return sessionStorage.getItem(TOKEN_KEY)
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)
 }
 
 function saveSession(token, username) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(USER_KEY, username)
   sessionStorage.setItem(TOKEN_KEY, token)
   sessionStorage.setItem(USER_KEY, username)
 }
@@ -24,7 +26,7 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [username, setUsername] = useState(
-    () => sessionStorage.getItem(USER_KEY) ?? null
+    () => localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY) || null
   )
 
   const login = useCallback(async (usernameInput, password) => {

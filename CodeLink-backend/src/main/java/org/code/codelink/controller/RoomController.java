@@ -12,6 +12,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.UUID;
 
 @RestController
@@ -50,9 +52,12 @@ public class RoomController {
     @DeleteMapping("/{roomId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
-    public void deleteRoom(@PathVariable String roomId) {
-        roomRepository.findByRoomId(roomId)
+    public void deleteRoom(@PathVariable String roomId, @AuthenticationPrincipal UserDetails principal) {
+        Room room = roomRepository.findByRoomId(roomId)
                 .orElseThrow(() -> new RoomNotFoundException(roomId));
+        if (room.getOwnerUsername() != null && (principal == null || !room.getOwnerUsername().equals(principal.getUsername()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the room owner can delete this room.");
+        }
         roomRepository.deleteByRoomId(roomId);
         redis.delete(codeKey(roomId));
     }

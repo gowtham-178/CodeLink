@@ -6,7 +6,8 @@ import { createRoom, deleteRoom } from '../services/roomApi'
 
 export default function EditorHeader({ roomId, ownerUsername, viewerCount }) {
   const navigate = useNavigate()
-  const { logout } = useAuth()
+  const { username, logout } = useAuth()
+  const isOwner = Boolean(ownerUsername && username && ownerUsername === username)
 
   const [copied,   setCopied]   = useState(false)
   const [creating, setCreating] = useState(false)
@@ -75,14 +76,16 @@ export default function EditorHeader({ roomId, ownerUsername, viewerCount }) {
           </span>
         )}
 
-        <HeaderBtn
-          onClick={openDelete}
-          title="Delete room"
-          className="bg-zinc-800 hover:bg-red-900/50 hover:text-red-400 text-zinc-400"
-        >
-          <Trash2 size={14} />
-          <span className="hidden sm:inline">Delete</span>
-        </HeaderBtn>
+        {isOwner && (
+          <HeaderBtn
+            onClick={openDelete}
+            title="Delete room"
+            className="bg-zinc-800 hover:bg-red-900/50 hover:text-red-400 text-zinc-400"
+          >
+            <Trash2 size={14} />
+            <span className="hidden sm:inline">Delete</span>
+          </HeaderBtn>
+        )}
 
         <HeaderBtn
           onClick={handleNewRoom}
