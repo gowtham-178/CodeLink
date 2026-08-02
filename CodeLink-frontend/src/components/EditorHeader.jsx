@@ -12,6 +12,10 @@ export default function EditorHeader({ roomId, ownerUsername, viewerCount }) {
   const [copied,   setCopied]   = useState(false)
   const [creating, setCreating] = useState(false)
 
+  const [newRoomOpen,     setNewRoomOpen]     = useState(false)
+  const [newRoomPassword, setNewRoomPassword] = useState('')
+  const [newRoomError,    setNewRoomError]    = useState('')
+
   const [deleteOpen,  setDeleteOpen]  = useState(false)
   const [deleting,    setDeleting]    = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -22,14 +26,27 @@ export default function EditorHeader({ roomId, ownerUsername, viewerCount }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  async function handleNewRoom() {
-    if (creating) return
+  function openNewRoomModal() {
+    setNewRoomPassword('')
+    setNewRoomError('')
+    setNewRoomOpen(true)
+  }
+
+  async function handleCreateNewRoom(e) {
+    e.preventDefault()
+    const pwd = newRoomPassword.trim()
+    if (!pwd) {
+      setNewRoomError('Please enter a room password.')
+      return
+    }
+    setNewRoomError('')
     setCreating(true)
     try {
-      const room = await createRoom()
+      const room = await createRoom(pwd)
+      setNewRoomOpen(false)
       window.open(`${window.location.origin}/${room.roomId}`, '_blank', 'noopener,noreferrer')
     } catch (err) {
-      console.error('Failed to create room', err)
+      setNewRoomError(err.message || 'Failed to create room.')
     } finally {
       setCreating(false)
     }
@@ -93,7 +110,7 @@ export default function EditorHeader({ roomId, ownerUsername, viewerCount }) {
         )}
 
         <HeaderBtn
-          onClick={handleNewRoom}
+          onClick={openNewRoomModal}
           disabled={creating}
           title="Open a new room in a new tab"
           className="bg-zinc-700 hover:bg-zinc-600 text-white"
@@ -119,6 +136,43 @@ export default function EditorHeader({ roomId, ownerUsername, viewerCount }) {
           <LogOut size={15} />
         </button>
       </header>
+
+      {/* New Room Password Modal */}
+      {newRoomOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl">
+            <h2 className="text-white font-semibold text-base mb-1">Create a new room</h2>
+            <p className="text-zinc-400 text-sm mb-4">Set a password for your new room.</p>
+            <form onSubmit={handleCreateNewRoom} className="flex flex-col gap-3">
+              <input
+                type="password"
+                placeholder="Room password"
+                value={newRoomPassword}
+                onChange={e => { setNewRoomPassword(e.target.value); setNewRoomError('') }}
+                autoFocus
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+              {newRoomError && <p className="text-red-400 text-xs">{newRoomError}</p>}
+              <div className="flex gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setNewRoomOpen(false)}
+                  className="flex-1 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                >
+                  {creating ? 'Creating…' : 'Create Room'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {deleteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

@@ -6,7 +6,6 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081'
 
 let client = null
 let subscription = null
-let sessionId = null
 
 // Generate a stable ID once per page load — never changes
 const LOCAL_SESSION_ID = Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -26,10 +25,9 @@ export function connect({ roomId, onMessage, onConnect, onDisconnect }) {
       roomId,
     },
     onConnect: (frame) => {
-      sessionId = LOCAL_SESSION_ID
       subscription?.unsubscribe()
       subscription = client.subscribe(`/topic/room/${roomId}`, (frame) => {
-        try { onMessage(JSON.parse(frame.body)) } catch (_) {}
+        try { onMessage(JSON.parse(frame.body)) } catch (_) { }
       })
       onConnect?.()
     },
@@ -61,9 +59,4 @@ export function disconnect() {
   subscription = null
   client?.deactivate()
   client = null
-  sessionId = null
-}
-
-export function isConnected() {
-  return client?.connected ?? false
 }

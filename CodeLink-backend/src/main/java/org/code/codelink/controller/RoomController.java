@@ -43,7 +43,7 @@ public class RoomController {
 
         Room room = roomRepository.save(new Room(roomId, principal.getUsername(), rawPassword));
         redis.opsForValue().set(codeKey(roomId), "");
-        return toResponse(room, "");
+        return toResponse(room);
     }
 
     // ── POST /api/rooms/join ──────────────────────────────────────────────────
@@ -56,12 +56,7 @@ public class RoomController {
         Room room = roomRepository.findByPassword(request.getPassword().trim())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No room found with that password."));
 
-        String code = redis.opsForValue().get(codeKey(room.getRoomId()));
-        if (code == null) {
-            code = room.getContent() != null ? room.getContent() : "";
-            redis.opsForValue().set(codeKey(room.getRoomId()), code);
-        }
-        return toResponse(room, code);
+        return toResponse(room);
     }
 
     // ── GET /api/rooms/{roomId} ───────────────────────────────────────────────
@@ -69,12 +64,7 @@ public class RoomController {
     public RoomResponse getRoom(@PathVariable String roomId) {
         Room room = roomRepository.findByRoomId(roomId)
                 .orElseThrow(() -> new RoomNotFoundException(roomId));
-        String code = redis.opsForValue().get(codeKey(roomId));
-        if (code == null) {
-            code = room.getContent() != null ? room.getContent() : "";
-            redis.opsForValue().set(codeKey(roomId), code);
-        }
-        return toResponse(room, code);
+        return toResponse(room);
     }
 
     // ── DELETE /api/rooms/{roomId} ────────────────────────────────────────────
@@ -96,7 +86,7 @@ public class RoomController {
         return "room:" + roomId + ":code";
     }
 
-    private RoomResponse toResponse(Room room, String code) {
-        return new RoomResponse(room.getRoomId(), room.getOwnerUsername(), code, room.getCreatedAt());
+    private RoomResponse toResponse(Room room) {
+        return new RoomResponse(room.getRoomId(), room.getOwnerUsername(), room.getCreatedAt());
     }
 }

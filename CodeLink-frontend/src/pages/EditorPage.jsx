@@ -5,7 +5,6 @@ import { useRoom } from '../contexts/RoomContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { getRoom } from '../services/roomApi'
 import * as socket from '../services/socketService'
-import { getSessionId, publishSync } from '../services/socketService'
 import EditorHeader from '../components/EditorHeader'
 import IconRail from '../components/IconRail'
 
@@ -25,10 +24,10 @@ const PLACEHOLDER =
   "Write or paste code here then share.\nAnyone you share the link with will see it as it's typed!"
 
 export default function EditorPage() {
-  const { roomId }  = useParams()
-  const navigate    = useNavigate()
+  const { roomId } = useParams()
+  const navigate = useNavigate()
   const { state, dispatch } = useRoom()
-  const { theme }   = useTheme()
+  const { theme } = useTheme()
   const editorRef = useRef(null)
   const isRemoteEditRef = useRef(false)
 
@@ -37,7 +36,7 @@ export default function EditorPage() {
 
   const handleMessage = useCallback((msg) => {
     if (typeof msg.code === 'string') {
-      if (msg.senderSession === getSessionId()) return
+      if (msg.senderSession === socket.getSessionId()) return
       const editor = editorRef.current
       if (editor) {
         const model = editor.getModel()
@@ -57,7 +56,7 @@ export default function EditorPage() {
           }
         }
       }
-      dispatchRef.current({ type: 'SET_CODE',         payload: msg.code })
+      dispatchRef.current({ type: 'SET_CODE', payload: msg.code })
       dispatchRef.current({ type: 'SET_VIEWER_COUNT', payload: msg.viewerCount ?? 0 })
     } else if (typeof msg.viewerCount === 'number') {
       dispatchRef.current({ type: 'SET_VIEWER_COUNT', payload: msg.viewerCount })
@@ -73,17 +72,18 @@ export default function EditorPage() {
     getRoom(roomId, controller.signal)
       .then(room => {
         if (!active) return
-        dispatch({ type: 'SET_ROOM_META', payload: {
-          ownerUsername: room.ownerUsername ?? null,
-          createdAt:     room.createdAt,
-        }})
+        dispatch({
+          type: 'SET_ROOM_META', payload: {
+            ownerUsername: room.ownerUsername ?? null,
+          }
+        })
         // Don't apply HTTP code — WebSocket sync is the single source of truth
         socket.connect({
           roomId,
-          onMessage:    handleMessage,
-          onConnect:    () => {
+          onMessage: handleMessage,
+          onConnect: () => {
             dispatch({ type: 'SET_CONNECTED', payload: true })
-            publishSync(roomId)
+            socket.publishSync(roomId)
           },
           onDisconnect: () => dispatch({ type: 'SET_CONNECTED', payload: false }),
         })
@@ -144,29 +144,37 @@ export default function EditorPage() {
             onMount={editor => { editorRef.current = editor }}
             options={{
               fontSize: 14,
-              minimap:                    { enabled: false },
-              wordWrap:                   'on',
-              lineNumbers:                'off',
-              scrollBeyondLastLine:       false,
-              automaticLayout:            true,
-              quickSuggestions:           false,
+              minimap: { enabled: false },
+              wordWrap: 'on',
+              lineNumbers: 'on',
+              lineNumbersMinChars: 3,
+              lineDecorationsWidth: 10,
+              autoIndent: 'none',
+              formatOnType: false,
+              formatOnPaste: false,
+              autoClosingBrackets: 'never',
+              autoClosingQuotes: 'never',
+              autoClosingOvertype: 'never',
+              autoSurround: 'never',
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              quickSuggestions: false,
               suggestOnTriggerCharacters: false,
-              parameterHints:             { enabled: false },
-              wordBasedSuggestions:       'off',
-              snippetSuggestions:         'none',
-              inlineSuggest:              { enabled: false },
-              suggest:                    { enabled: false },
-              hover:                      { enabled: false },
-              contextmenu:                false,
-              commandPalette:             false,
-              lightbulb:                  { enabled: 'off' },
-              renderLineHighlight:        'none',
-              occurrencesHighlight:       'off',
-              selectionHighlight:         false,
-              matchBrackets:              'never',
-              folding:                    false,
-              glyphMargin:                false,
-              lineDecorationsWidth:       0,
+              parameterHints: { enabled: false },
+              wordBasedSuggestions: 'off',
+              snippetSuggestions: 'none',
+              inlineSuggest: { enabled: false },
+              suggest: { enabled: false },
+              hover: { enabled: false },
+              contextmenu: false,
+              commandPalette: false,
+              lightbulb: { enabled: 'off' },
+              renderLineHighlight: 'none',
+              occurrencesHighlight: 'off',
+              selectionHighlight: false,
+              matchBrackets: 'never',
+              folding: false,
+              glyphMargin: false,
             }}
           />
 
@@ -174,7 +182,7 @@ export default function EditorPage() {
             <div
               className="absolute top-0 left-0 pointer-events-none select-none"
               style={{
-                top: '6px', left: '10px',
+                top: '6px', left: '52px',
                 fontFamily: 'Menlo, Monaco, "Courier New", monospace',
                 fontSize: '14px', lineHeight: '21px',
                 color: theme !== 'light' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.25)',
@@ -186,7 +194,7 @@ export default function EditorPage() {
           )}
         </div>
 
-        <IconRail language={state.language} code={state.code} />
+        <IconRail language="plaintext" code={state.code} />
       </div>
 
       {/* Status strip */}
