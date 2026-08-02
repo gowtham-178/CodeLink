@@ -23,7 +23,7 @@ public class Room {
     @Column(nullable = true, length = 50)
     private String ownerUsername;
 
-    @Column(nullable = true, length = 100)
+    @Column(unique = true, nullable = true, length = 100)
     private String password;
 
     @Column(columnDefinition = "TEXT")

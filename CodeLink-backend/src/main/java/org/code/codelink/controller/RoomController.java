@@ -36,6 +36,11 @@ public class RoomController {
         String rawPassword = (request != null && request.getPassword() != null && !request.getPassword().isBlank())
                 ? request.getPassword().trim()
                 : null;
+
+        if (rawPassword != null && roomRepository.existsByPassword(rawPassword)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A room with this password already exists. Please choose a different password.");
+        }
+
         Room room = roomRepository.save(new Room(roomId, principal.getUsername(), rawPassword));
         redis.opsForValue().set(codeKey(roomId), "");
         return toResponse(room, "");
@@ -48,7 +53,7 @@ public class RoomController {
         if (request == null || request.getPassword() == null || request.getPassword().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room password is required.");
         }
-        Room room = roomRepository.findFirstByPasswordOrderByCreatedAtDesc(request.getPassword().trim())
+        Room room = roomRepository.findByPassword(request.getPassword().trim())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No room found with that password."));
 
         String code = redis.opsForValue().get(codeKey(room.getRoomId()));
