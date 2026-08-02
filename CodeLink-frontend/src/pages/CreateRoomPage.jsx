@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Link2, Plus, LogIn, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { createRoom } from '../services/roomApi'
+import { createRoom, joinRoomByPassword } from '../services/roomApi'
 
 export default function CreateRoomPage() {
   const navigate = useNavigate()
@@ -11,16 +11,24 @@ export default function CreateRoomPage() {
   const location = useLocation()
   const roomNotFound = location.state?.roomNotFound ?? false
 
-  const [creating, setCreating]       = useState(false)
-  const [createError, setCreateError] = useState('')
-  const [joinInput, setJoinInput]     = useState('')
-  const [joinError, setJoinError]     = useState('')
+  const [createPassword, setCreatePassword] = useState('')
+  const [creating, setCreating]             = useState(false)
+  const [createError, setCreateError]       = useState('')
 
-  async function handleCreate() {
+  const [joinPassword, setJoinPassword]     = useState('')
+  const [joining, setJoining]               = useState(false)
+  const [joinError, setJoinError]           = useState('')
+
+  async function handleCreate(e) {
+    if (e) e.preventDefault()
     setCreateError('')
+    if (!createPassword.trim()) {
+      setCreateError('Please enter a room password.')
+      return
+    }
     setCreating(true)
     try {
-      const room = await createRoom()
+      const room = await createRoom(createPassword.trim())
       navigate(`/${room.roomId}`)
     } catch (err) {
       setCreateError(err.message || 'Failed to create room.')
@@ -29,19 +37,23 @@ export default function CreateRoomPage() {
     }
   }
 
-  function handleJoin(e) {
+  async function handleJoin(e) {
     e.preventDefault()
-    const raw = joinInput.trim()
-    if (!raw) { setJoinError('Enter a room ID or link.'); return }
-
-    let roomId = raw
+    const pwd = joinPassword.trim()
+    if (!pwd) {
+      setJoinError('Please enter room password.')
+      return
+    }
+    setJoinError('')
+    setJoining(true)
     try {
-      const url = new URL(raw)
-      roomId = url.pathname.split('/').filter(Boolean).at(-1) ?? raw
-    } catch (_) {}
-
-    if (!roomId) { setJoinError('Could not read a room ID from that input.'); return }
-    navigate(`/${roomId}`)
+      const room = await joinRoomByPassword(pwd)
+      navigate(`/${room.roomId}`)
+    } catch (err) {
+      setJoinError(err.message || 'No room found with that password.')
+    } finally {
+      setJoining(false)
+    }
   }
 
   return (
@@ -77,41 +89,49 @@ export default function CreateRoomPage() {
           <div className="border-t border-zinc-800" />
 
           {/* Create Room */}
-          <div className="flex flex-col gap-2">
+          <form onSubmit={handleCreate} className="flex flex-col gap-2">
             <h2 className="text-white font-semibold text-sm">Create a room</h2>
-            <p className="text-zinc-500 text-xs">Start a new shared editor.</p>
+            <p className="text-zinc-500 text-xs">Set a password for your new room.</p>
+            <input
+              type="password"
+              placeholder="Room password"
+              value={createPassword}
+              onChange={e => { setCreatePassword(e.target.value); setCreateError('') }}
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            />
             {createError && <p className="text-red-400 text-xs">{createError}</p>}
             <button
-              onClick={handleCreate}
+              type="submit"
               disabled={creating}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
             >
               <Plus size={15} />
               {creating ? 'Creating…' : 'Create Room'}
             </button>
-          </div>
+          </form>
 
           <div className="border-t border-zinc-800" />
 
           {/* Join Room */}
           <div className="flex flex-col gap-2">
             <h2 className="text-white font-semibold text-sm">Join a room</h2>
-            <p className="text-zinc-500 text-xs">Paste a room link or ID you received.</p>
+            <p className="text-zinc-500 text-xs">Enter the room password you received.</p>
             <form onSubmit={handleJoin} className="flex flex-col gap-2">
               <input
-                type="text"
-                placeholder="https://… or room ID"
-                value={joinInput}
-                onChange={e => { setJoinInput(e.target.value); setJoinError('') }}
+                type="password"
+                placeholder="Enter room password"
+                value={joinPassword}
+                onChange={e => { setJoinPassword(e.target.value); setJoinError('') }}
                 className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
               />
               {joinError && <p className="text-red-400 text-xs">{joinError}</p>}
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                disabled={joining}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white text-sm font-medium transition-colors"
               >
                 <LogIn size={15} />
-                Join Room
+                {joining ? 'Joining…' : 'Join Room'}
               </button>
             </form>
           </div>

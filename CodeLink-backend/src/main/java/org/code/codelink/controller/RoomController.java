@@ -2,6 +2,8 @@ package org.code.codelink.controller;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.code.codelink.dto.CreateRoomRequest;
+import org.code.codelink.dto.JoinRoomRequest;
 import org.code.codelink.dto.RoomResponse;
 import org.code.codelink.exception.RoomNotFoundException;
 import org.code.codelink.model.Room;
@@ -11,7 +13,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
-
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
@@ -25,14 +26,37 @@ public class RoomController {
     private final StringRedisTemplate redis;
 
     // ── POST /api/rooms ───────────────────────────────────────────────────────
-    // Authenticated only — owner always set from JWT.
+    // Authenticated only — owner always set from JWT. Option to set password.
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public RoomResponse createRoom(@AuthenticationPrincipal UserDetails principal) {
+    public RoomResponse createRoom(
+            @RequestBody(required = false) CreateRoomRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
         String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-        Room room = roomRepository.save(new Room(roomId, principal.getUsername()));
+        String rawPassword = (request != null && request.getPassword() != null && !request.getPassword().isBlank())
+                ? request.getPassword().trim()
+                : null;
+        Room room = roomRepository.save(new Room(roomId, principal.getUsername(), rawPassword));
         redis.opsForValue().set(codeKey(roomId), "");
         return toResponse(room, "");
+    }
+
+    // ── POST /api/rooms/join ──────────────────────────────────────────────────
+    // Joins room by password only.
+    @PostMapping("/join")
+    public RoomResponse joinRoom(@RequestBody JoinRoomRequest request) {
+        if (request == null || request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room password is required.");
+        }
+        Room room = roomRepository.findFirstByPasswordOrderByCreatedAtDesc(request.getPassword().trim())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No room found with that password."));
+
+        String code = redis.opsForValue().get(codeKey(room.getRoomId()));
+        if (code == null) {
+            code = room.getContent() != null ? room.getContent() : "";
+            redis.opsForValue().set(codeKey(room.getRoomId()), code);
+        }
+        return toResponse(room, code);
     }
 
     // ── GET /api/rooms/{roomId} ───────────────────────────────────────────────

@@ -78,7 +78,7 @@ export default function LoginPage() {
 
           <p className="text-zinc-500 text-xs text-center mt-5">
             No account?{' '}
-            <Link to="/register" className="text-indigo-400 hover:text-indigo-300 transition-colors">
+            <Link to="/register" state={{ from: location.state?.from }} className="text-indigo-400 hover:text-indigo-300 transition-colors">
               Create one
             </Link>
           </p>

@@ -23,6 +23,9 @@ public class Room {
     @Column(nullable = true, length = 50)
     private String ownerUsername;
 
+    @Column(nullable = true, length = 100)
+    private String password;
+
     @Column(columnDefinition = "TEXT")
     private String content;
 
@@ -30,8 +33,13 @@ public class Room {
     private Instant createdAt;
 
     public Room(String roomId, String ownerUsername) {
+        this(roomId, ownerUsername, null);
+    }
+
+    public Room(String roomId, String ownerUsername, String password) {
         this.roomId = roomId;
         this.ownerUsername = ownerUsername; // may be null for guests
+        this.password = password;
         this.content = "";
         this.createdAt = Instant.now();
     }

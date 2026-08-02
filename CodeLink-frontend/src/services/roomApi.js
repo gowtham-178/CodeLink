@@ -23,8 +23,20 @@ async function apiFetch(path, options = {}) {
 }
 
 // POST /api/rooms
-export const createRoom = (signal) =>
-  apiFetch('/rooms', { method: 'POST', signal })
+export const createRoom = (password, signal) =>
+  apiFetch('/rooms', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+    signal,
+  })
+
+// POST /api/rooms/join
+export const joinRoomByPassword = (password, signal) =>
+  apiFetch('/rooms/join', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+    signal,
+  })
 
 // GET /api/rooms/:roomId
 export const getRoom = (roomId, signal) =>

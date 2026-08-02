@@ -92,7 +92,7 @@ export default function RegisterPage() {
 
           <p className="text-zinc-500 text-xs text-center mt-5">
             Already have an account?{' '}
-            <Link to="/login" className="text-indigo-400 hover:text-indigo-300 transition-colors">
+            <Link to="/login" state={{ from: location.state?.from }} className="text-indigo-400 hover:text-indigo-300 transition-colors">
               Sign in
             </Link>
           </p>

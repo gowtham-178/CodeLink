@@ -17,7 +17,7 @@ export default function App() {
       <Route path="/login"    element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/"         element={<RequireAuth><CreateRoomPage /></RequireAuth>} />
-      <Route path="/:roomId"  element={<EditorPage />} />
+      <Route path="/:roomId"  element={<RequireAuth><EditorPage /></RequireAuth>} />
       <Route path="*"         element={<Navigate to="/" replace />} />
     </Routes>
   )
