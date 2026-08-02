@@ -40,7 +40,13 @@ public class RoomWebSocketController {
     @MessageMapping("/room/{roomId}/sync")
     public void sync(@DestinationVariable String roomId) {
         String code = redis.opsForValue().get(RoomController.codeKey(roomId));
-        if (code == null) code = "";
+        if (code == null) {
+            // Redis evicted the key — fall back to Postgres
+            code = roomRepository.findByRoomId(roomId)
+                    .map(r -> r.getContent() != null ? r.getContent() : "")
+                    .orElse("");
+            if (!code.isEmpty()) redis.opsForValue().set(RoomController.codeKey(roomId), code);
+        }
         broker.convertAndSend("/topic/room/" + roomId,
                 new WsMessages.CodeBroadcast(code, viewerCount(roomId), null));
     }
