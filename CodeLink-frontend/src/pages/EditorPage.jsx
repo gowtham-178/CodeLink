@@ -105,7 +105,9 @@ export default function EditorPage() {
 
   function handleEditorChange(value) {
     if (isRemoteEditRef.current) return
-    socket.publishEdit(roomId, value ?? '')
+    const newCode = value ?? ''
+    dispatch({ type: 'SET_CODE', payload: newCode })
+    socket.publishEdit(roomId, newCode)
   }
 
   const statusColor = state.connected ? 'bg-green-500' : 'bg-zinc-600'
@@ -154,7 +156,7 @@ export default function EditorPage() {
             }}
           />
 
-          {state.code === '' && (
+          {(!state.code || state.code.length === 0) && (
             <div
               className="absolute top-0 left-0 pointer-events-none select-none"
               style={{

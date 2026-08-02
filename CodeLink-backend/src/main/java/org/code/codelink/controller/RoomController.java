@@ -1,5 +1,6 @@
 package org.code.codelink.controller;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.code.codelink.dto.RoomResponse;
 import org.code.codelink.exception.RoomNotFoundException;
@@ -48,6 +49,7 @@ public class RoomController {
     // ── DELETE /api/rooms/{roomId} ────────────────────────────────────────────
     @DeleteMapping("/{roomId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Transactional
     public void deleteRoom(@PathVariable String roomId) {
         roomRepository.findByRoomId(roomId)
                 .orElseThrow(() -> new RoomNotFoundException(roomId));
