@@ -38,11 +38,13 @@ public class RoomController {
                 : null;
 
         if (rawPassword != null && roomRepository.existsByPassword(rawPassword)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A room with this password already exists. Please choose a different password.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A room with this password already exists. Please choose a different password.");
         }
 
         Room room = roomRepository.save(new Room(roomId, principal.getUsername(), rawPassword));
-        redis.opsForValue().set(codeKey(roomId), "");
+        redis.opsForValue().set(codeKey(roomId), "", java.time.Duration.ofHours(1)); // Set a 1-hour expiration for the
+                                                                                     // room code in Redis
         return toResponse(room);
     }
 
@@ -54,8 +56,11 @@ public class RoomController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room password is required.");
         }
         Room room = roomRepository.findByPassword(request.getPassword().trim())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No room found with that password."));
-
+                .orElseThrow(
+                        () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No room found with that password."));
+        redis.opsForValue().set(codeKey(room.getRoomId()), "", java.time.Duration.ofHours(1)); // Set a 1-hour
+                                                                                               // expiration for the
+                                                                                               // room code in Redis
         return toResponse(room);
     }
 
@@ -74,7 +79,8 @@ public class RoomController {
     public void deleteRoom(@PathVariable String roomId, @AuthenticationPrincipal UserDetails principal) {
         Room room = roomRepository.findByRoomId(roomId)
                 .orElseThrow(() -> new RoomNotFoundException(roomId));
-        if (room.getOwnerUsername() != null && (principal == null || !room.getOwnerUsername().equals(principal.getUsername()))) {
+        if (room.getOwnerUsername() != null
+                && (principal == null || !room.getOwnerUsername().equals(principal.getUsername()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the room owner can delete this room.");
         }
         roomRepository.deleteByRoomId(roomId);
