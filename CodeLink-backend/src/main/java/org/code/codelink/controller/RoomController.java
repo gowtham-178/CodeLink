@@ -20,7 +20,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -31,6 +33,8 @@ public class RoomController {
     private final RoomRepository roomRepository;
     private final StringRedisTemplate redis;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    private static final Duration CACHE_TTL = Duration.ofHours(1);
 
     // ── POST /api/rooms ───────────────────────────────────────────────────────
     // Authenticated only — owner always set from JWT. Option to set password.
@@ -47,7 +51,7 @@ public class RoomController {
         String hashedPassword = null;
         if (rawPassword != null) {
             String sha = sha256(rawPassword);
-            if (redis.hasKey(pwdLookupKey(sha))) {
+            if (redis.hasKey(roomCacheKey(sha))) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "A room with this password already exists. Please choose a different password.");
             }
@@ -57,10 +61,9 @@ public class RoomController {
         Room room = roomRepository.save(new Room(roomId, principal.getUsername(), hashedPassword));
 
         if (rawPassword != null) {
-            redis.opsForValue().set(pwdLookupKey(sha256(rawPassword)), roomId, Duration.ofHours(1));
-            redis.opsForValue().set(pwdHashKey(roomId), hashedPassword, Duration.ofHours(1));
+            cacheRoom(sha256(rawPassword), room);
         }
-        redis.opsForValue().set(codeKey(roomId), "", Duration.ofHours(1));
+        redis.opsForValue().set(codeKey(roomId), "", CACHE_TTL);
         return toResponse(room);
     }
 
@@ -73,15 +76,18 @@ public class RoomController {
         String raw = request.getPassword().trim();
         String sha = sha256(raw);
 
-        // 1. Try Redis index first
-        String roomId = redis.opsForValue().get(pwdLookupKey(sha));
-        if (roomId != null) {
-            String hash = redis.opsForValue().get(pwdHashKey(roomId));
-            if (hash == null || !passwordEncoder.matches(raw, hash)) {
+        // 1. Try Redis cache first — single hash holds all room metadata
+        Map<Object, Object> cached = redis.opsForHash().entries(roomCacheKey(sha));
+        if (!cached.isEmpty()) {
+            String pwdHash = (String) cached.get("pwdHash");
+            if (pwdHash == null || !passwordEncoder.matches(raw, pwdHash)) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid password.");
             }
-            return toResponse(roomRepository.findByRoomId(roomId)
-                    .orElseThrow(() -> new RoomNotFoundException(roomId)));
+            return new RoomResponse(
+                    (String) cached.get("roomId"),
+                    (String) cached.get("owner"),
+                    Instant.parse((String) cached.get("createdAt"))
+            );
         }
 
         // 2. Fall back to DB — find all rooms with a password and BCrypt-match
@@ -91,9 +97,8 @@ public class RoomController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No room found with that password."));
 
         // 3. Populate Redis cache
-        redis.opsForValue().set(pwdLookupKey(sha), room.getRoomId(), Duration.ofHours(1));
-        redis.opsForValue().set(pwdHashKey(room.getRoomId()), room.getPassword(), Duration.ofHours(1));
-        redis.opsForValue().set(codeKey(room.getRoomId()), "", Duration.ofHours(1));
+        cacheRoom(sha, room);
+        redis.opsForValue().set(codeKey(room.getRoomId()), "", CACHE_TTL);
 
         return toResponse(room);
     }
@@ -119,13 +124,52 @@ public class RoomController {
         }
         roomRepository.deleteByRoomId(roomId);
         redis.delete(codeKey(roomId));
-        redis.delete(pwdHashKey(roomId)); // lookup key expires on its own TTL
+        // Remove the cache hash if the room had a password
+        if (room.getPassword() != null) {
+            // We need the SHA to find the key — re-derive it isn't possible from bcrypt.
+            // Scan for the hash that maps to this roomId. Since delete is rare, this is acceptable.
+            // Alternative: store the SHA key reference. For now, use a reverse-lookup approach.
+            deleteRoomCacheByRoomId(roomId);
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    public static String codeKey(String roomId)    { return "room:" + roomId + ":code"; }
-    public static String pwdHashKey(String roomId) { return "room:" + roomId + ":pwd"; }
-    public static String pwdLookupKey(String sha)  { return "room:pwdlookup:" + sha; }
+
+    /** Single Redis Hash key per password — stores all room metadata */
+    public static String roomCacheKey(String sha) { return "room:pwd:" + sha; }
+
+    /** Code buffer key — kept separate since WebSocket reads/writes by roomId */
+    public static String codeKey(String roomId) { return "room:" + roomId + ":code"; }
+
+    /** Cache room metadata as a single Redis Hash */
+    private void cacheRoom(String sha, Room room) {
+        String key = roomCacheKey(sha);
+        redis.opsForHash().putAll(key, Map.of(
+                "roomId",    room.getRoomId(),
+                "pwdHash",   room.getPassword(),
+                "owner",     room.getOwnerUsername() != null ? room.getOwnerUsername() : "",
+                "createdAt", room.getCreatedAt().toString()
+        ));
+        redis.expire(key, CACHE_TTL);
+    }
+
+    /** Delete the cache hash by scanning for the entry that matches the given roomId. */
+    private void deleteRoomCacheByRoomId(String roomId) {
+        var cursor = redis.scan(org.springframework.data.redis.core.ScanOptions.scanOptions()
+                .match("room:pwd:*").count(100).build());
+        try {
+            while (cursor.hasNext()) {
+                String key = cursor.next();
+                String cachedRoomId = (String) redis.opsForHash().get(key, "roomId");
+                if (roomId.equals(cachedRoomId)) {
+                    redis.delete(key);
+                    break;
+                }
+            }
+        } finally {
+            cursor.close();
+        }
+    }
 
     static String sha256(String input) {
         try {
