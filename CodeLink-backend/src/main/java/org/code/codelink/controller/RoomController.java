@@ -34,10 +34,9 @@ public class RoomController {
     private final StringRedisTemplate redis;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    private static final Duration CACHE_TTL = Duration.ofHours(1);
+    private static final Duration CACHE_TTL = Duration.ofHours(24);
 
     // ── POST /api/rooms ───────────────────────────────────────────────────────
-    // Authenticated only — owner always set from JWT. Option to set password.
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RoomResponse createRoom(
@@ -45,24 +44,18 @@ public class RoomController {
             @AuthenticationPrincipal UserDetails principal) {
         String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         String rawPassword = (request != null && request.getPassword() != null && !request.getPassword().isBlank())
-                ? request.getPassword().trim()
-                : null;
+                ? request.getPassword().trim() : null;
 
-        String hashedPassword = null;
-        if (rawPassword != null) {
-            String sha = sha256(rawPassword);
-            if (redis.hasKey(roomCacheKey(sha))) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "A room with this password already exists. Please choose a different password.");
-            }
-            hashedPassword = passwordEncoder.encode(rawPassword);
+        String sha = rawPassword != null ? sha256(rawPassword) : null;
+        if (sha != null && roomRepository.existsByPasswordSha(sha)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A room with this password already exists.");
         }
 
-        Room room = roomRepository.save(new Room(roomId, principal.getUsername(), hashedPassword));
+        String hashedPassword = rawPassword != null ? passwordEncoder.encode(rawPassword) : null;
+        Room room = roomRepository.save(new Room(roomId, principal.getUsername(), hashedPassword, sha));
 
-        if (rawPassword != null) {
-            cacheRoom(sha256(rawPassword), room);
-        }
+        if (sha != null) cacheRoom(sha, room);
         redis.opsForValue().set(codeKey(roomId), "", CACHE_TTL);
         return toResponse(room);
     }
@@ -70,36 +63,31 @@ public class RoomController {
     // ── POST /api/rooms/join ──────────────────────────────────────────────────
     @PostMapping("/join")
     public RoomResponse joinRoom(@RequestBody JoinRoomRequest request) {
-        if (request == null || request.getPassword() == null || request.getPassword().isBlank()) {
+        if (request == null || request.getPassword() == null || request.getPassword().isBlank())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room password is required.");
-        }
+
         String raw = request.getPassword().trim();
         String sha = sha256(raw);
 
-        // 1. Try Redis cache first — single hash holds all room metadata
+        // 1. Try Redis cache — SHA-256 key match guarantees password correctness,
+        //    so we skip the expensive BCrypt check (~150ms) on cache hits.
         Map<Object, Object> cached = redis.opsForHash().entries(roomCacheKey(sha));
         if (!cached.isEmpty()) {
-            String pwdHash = (String) cached.get("pwdHash");
-            if (pwdHash == null || !passwordEncoder.matches(raw, pwdHash)) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid password.");
-            }
             return new RoomResponse(
                     (String) cached.get("roomId"),
                     (String) cached.get("owner"),
-                    Instant.parse((String) cached.get("createdAt"))
-            );
+                    Instant.parse((String) cached.get("createdAt")));
         }
 
-        // 2. Fall back to DB — find all rooms with a password and BCrypt-match
-        Room room = roomRepository.findAllWithPassword().stream()
-                .filter(r -> passwordEncoder.matches(raw, r.getPassword()))
-                .findFirst()
+        // 2. Direct DB lookup by SHA — O(1), no BCrypt scan
+        Room room = roomRepository.findByPasswordSha(sha)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No room found with that password."));
 
-        // 3. Populate Redis cache
-        cacheRoom(sha, room);
-        redis.opsForValue().set(codeKey(room.getRoomId()), "", CACHE_TTL);
+        if (!passwordEncoder.matches(raw, room.getPassword()))
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid password.");
 
+        // 3. Re-populate cache
+        cacheRoom(sha, room);
         return toResponse(room);
     }
 

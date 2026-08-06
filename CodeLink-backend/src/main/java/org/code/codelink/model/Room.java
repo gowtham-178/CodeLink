@@ -26,6 +26,10 @@ public class Room {
     @Column(unique = true, nullable = true, length = 100)
     private String password;
 
+    // SHA-256 of the raw password — indexed for O(1) join lookup, avoids BCrypt scan
+    @Column(unique = true, nullable = true, length = 64)
+    private String passwordSha;
+
     @Column(columnDefinition = "TEXT")
     private String content;
 
@@ -33,13 +37,14 @@ public class Room {
     private Instant createdAt;
 
     public Room(String roomId, String ownerUsername) {
-        this(roomId, ownerUsername, null);
+        this(roomId, ownerUsername, null, null);
     }
 
-    public Room(String roomId, String ownerUsername, String password) {
+    public Room(String roomId, String ownerUsername, String password, String passwordSha) {
         this.roomId = roomId;
-        this.ownerUsername = ownerUsername; // may be null for guests
+        this.ownerUsername = ownerUsername;
         this.password = password;
+        this.passwordSha = passwordSha;
         this.content = "";
         this.createdAt = Instant.now();
     }

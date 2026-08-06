@@ -16,6 +16,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionConnectEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -45,7 +47,7 @@ public class RoomWebSocketController {
             code = roomRepository.findByRoomId(roomId)
                     .map(r -> r.getContent() != null ? r.getContent() : "")
                     .orElse("");
-            if (!code.isEmpty()) redis.opsForValue().set(RoomController.codeKey(roomId), code);
+            if (!code.isEmpty()) redis.opsForValue().set(RoomController.codeKey(roomId), code, Duration.ofHours(24));
         }
         broker.convertAndSend("/topic/room/" + roomId,
                 new WsMessages.CodeBroadcast(code, viewerCount(roomId), null));
@@ -62,13 +64,15 @@ public class RoomWebSocketController {
             SimpMessageHeaderAccessor headers) {
 
         String code = msg.getCode() != null ? msg.getCode() : "";
-        redis.opsForValue().set(RoomController.codeKey(roomId), code);
+        redis.opsForValue().set(RoomController.codeKey(roomId), code, Duration.ofHours(24));
 
-        // Persist to Postgres on every edit for all users (guests & authenticated)
-        roomRepository.findByRoomId(roomId).ifPresent(room -> {
-            room.setContent(code);
-            roomRepository.save(room);
-        });
+        // Persist to Postgres asynchronously — don't block the real-time WS path
+        CompletableFuture.runAsync(() ->
+            roomRepository.findByRoomId(roomId).ifPresent(room -> {
+                room.setContent(code);
+                roomRepository.save(room);
+            })
+        );
 
         // Lazy-register session→room fallback
         String sessionId = headers.getSessionId();
